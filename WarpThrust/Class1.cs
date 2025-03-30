@@ -353,6 +353,7 @@ namespace WarpThrust
                             }
                         }
                     }
+                    timeWarp = false;
                 }
             }
         }
@@ -366,7 +367,6 @@ namespace WarpThrust
             WaterfallFX = part.FindModuleImplementing<ModuleWaterfallFX>();
 
             WarpEngines.Add(new WarpEngine());
-
             WarpEngines[WarpEngines.Count - 1].Waterfall = WaterfallFX;
             WarpEngines[WarpEngines.Count - 1].Effect = EngineFX.powerEffectName;
             WarpEngines[WarpEngines.Count - 1].MaxThrust = Engines.maxThrust;
@@ -387,7 +387,6 @@ namespace WarpThrust
             Events["UseActive"].active = false;
             Events["Rotate"].active = false;
 
-            print(TAG + "current state: " + state);
             if (state == StartState.Editor)
             {
                 active = false;
