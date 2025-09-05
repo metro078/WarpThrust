@@ -1,9 +1,6 @@
-﻿
-using System;
 using System.Collections.Generic;
-using Waterfall;
 using UnityEngine;
-using KSP.UI.Screens;
+using Waterfall;
 
 namespace WarpThrust
 {
@@ -18,6 +15,7 @@ namespace WarpThrust
         public List<float> PropFlow = new List<float>();
     }
 
+    [KSPAddon(KSPAddon.Startup.Flight, false)]
     public class WarpThrust : PartModule
     {
         [KSPField(guiActiveEditor = false, isPersistant = false)]
@@ -33,7 +31,6 @@ namespace WarpThrust
         bool useRotation = true;
         bool useActive = true;
         bool rotate = true;
-        bool active = false;
         float Throttle = 0f;
         float simThrottle = 0f;
         float PropsFlow = 0f;
@@ -49,7 +46,8 @@ namespace WarpThrust
         Vector3 TotalDir = Vector3.zero;
         Vector3 WantedRot = Vector3.zero;
 
-        [KSPEvent(guiActive = true, guiActiveEditor = true, guiName = "Currently: Thrusting SAS", active = true, groupName = groupName, groupDisplayName = groupName)]
+        #region Events
+        [KSPEvent(guiActive = true, guiActiveEditor = true, guiName = "Thrust mode: Thrusting SAS", active = false, groupName = groupName, groupDisplayName = groupName)]
         protected void UseRot()
         {
             useRotation = true;
@@ -57,7 +55,7 @@ namespace WarpThrust
             Events["UseRot"].active = false;
         }
 
-        [KSPEvent(guiActive = true, guiActiveEditor = true, guiName = "Currently: Thrusting forward", active = true, groupName = groupName, groupDisplayName = groupName)]
+        [KSPEvent(guiActive = true, guiActiveEditor = true, guiName = "Thrust mode: Thrusting forward", active = true, groupName = groupName, groupDisplayName = groupName)]
         protected void UseSAS()
         {
             useRotation = false;
@@ -73,8 +71,7 @@ namespace WarpThrust
             Events["UseRot"].active = !useRotation;
         }
 
-
-        [KSPEvent(guiActive = true, guiActiveEditor = true, guiName = "Currently: Using all engines", active = true, groupName = groupName, groupDisplayName = groupName)]
+        [KSPEvent(guiActive = true, guiActiveEditor = true, guiName = "Engines: Using all engines", active = false, groupName = groupName, groupDisplayName = groupName)]
         protected void UseActive()
         {
             useActive = true;
@@ -82,7 +79,7 @@ namespace WarpThrust
             Events["UseActive"].active = false;
         }
 
-        [KSPEvent(guiActive = true, guiActiveEditor = true, guiName = "Currently: Only using an active engine", active = true, groupName = groupName, groupDisplayName = groupName)]
+        [KSPEvent(guiActive = true, guiActiveEditor = true, guiName = "Engines: Only using an active engine", active = true, groupName = groupName, groupDisplayName = groupName)]
         protected void UseThrottle()
         {
             useActive = false;
@@ -98,8 +95,7 @@ namespace WarpThrust
             Events["UseActive"].active = !useActive;
         }
 
-
-        [KSPEvent(guiActive = true, guiActiveEditor = true, guiName = "Currently: Not Rotating", active = true, groupName = groupName, groupDisplayName = groupName)]
+        [KSPEvent(guiActive = true, guiActiveEditor = true, guiName = "Rotation: Not Rotating", active = false, groupName = groupName, groupDisplayName = groupName)]
         protected void Rotate()
         {
             rotate = true;
@@ -107,7 +103,7 @@ namespace WarpThrust
             Events["Rotate"].active = false;
         }
 
-        [KSPEvent(guiActive = true, guiActiveEditor = true, guiName = "Currently: Automatically Rotating", active = true, groupName = groupName, groupDisplayName = groupName)]
+        [KSPEvent(guiActive = true, guiActiveEditor = true, guiName = "Rotation: Automatically Rotating", active = true, groupName = groupName, groupDisplayName = groupName)]
         protected void NotRotate()
         {
             rotate = false;
@@ -122,6 +118,7 @@ namespace WarpThrust
             Events["NotRotate"].active = rotate;
             Events["Rotate"].active = !rotate;
         }
+        #endregion 
 
 
         public ManeuverNode FindactiveManeuver(Vessel vessel)
@@ -149,7 +146,7 @@ namespace WarpThrust
             int i = 0;
             while (i < 10 && referenceBody != null)
             {
-                print(referenceBody.name);
+                //print(referenceBody.name);
                 targetPosition = targetPosition + referenceBody.getPositionAtUT(UT);
                 if (referenceBody.GetOrbit() == null)
                 {
@@ -157,7 +154,7 @@ namespace WarpThrust
                 }
                 referenceBody = referenceBody.GetOrbit().referenceBody;
             }
-            return targetPosition; 
+            return targetPosition;
         }
 
         public Vector3 GetVesselPositionAtUt(Vessel vessel, double UT)
@@ -167,7 +164,7 @@ namespace WarpThrust
             int i = 0;
             while (i < 10 && referenceBody != null)
             {
-                print(referenceBody.name);
+                //print(referenceBody.name);
                 vesselPosition = vesselPosition + referenceBody.getPositionAtUT(UT);
                 if (referenceBody.GetOrbit() == null)
                 {
@@ -246,17 +243,14 @@ namespace WarpThrust
 
         public void FixedUpdate()
         {
-            if (active &&(vessel.BestSituation == Vessel.Situations.ORBITING || vessel.BestSituation == Vessel.Situations.ESCAPING))
+            if (vessel.BestSituation == Vessel.Situations.ORBITING || vessel.BestSituation == Vessel.Situations.ESCAPING || vessel.BestSituation == Vessel.Situations.SUB_ORBITAL)
             {
                 if (TimeWarp.CurrentRate != 1 && TimeWarp.WarpMode == TimeWarp.Modes.HIGH)
                 {
                     Engines = part.FindModuleImplementing<ModuleEngines>();
                     if (Throttle != 0f)
                     {
-                        String SpeedMode = KSP.UI.Screens.Flight.SpeedDisplay.Instance.textTitle.text;
-                        //print(SpeedMode);
                         WantedRot = CalcWantedOrbRot(vessel, Planetarium.GetUniversalTime(), WantedRot);
-                        //print(WantedRot);
                         if (rotate)
                         {
                             part.Rigidbody.angularVelocity = Vector3.zero;
@@ -270,7 +264,7 @@ namespace WarpThrust
                             part.Effect(Engine.Effect, simThrottle, -1);
                             foreach (Transform Thrusttransform in Engines.thrustTransforms)
                             {
-                                TotalDir = TotalDir - Thrusttransform.forward;
+                                TotalDir -= Thrusttransform.forward;
                                 //EnginesDir = Thrusttransform.localRotation;
                                 transforms += 1;
                             }
@@ -283,32 +277,36 @@ namespace WarpThrust
                             {
                                 Perturb(vessel.orbit, WantedRot * (float)(TimeWarp.fixedDeltaTime * simThrottle * Engine.MaxThrust / vessel.totalMass), Planetarium.GetUniversalTime());
                             }
-                            //print("Total:" + TotalDir / transforms);
-                            //print("New:" + EnginesDir.eulerAngles);
-                            //print("Vessel:" + vessel.transform.rotation.eulerAngles);
-                            //print("something:" + (EnginesDir * vessel.transform.rotation).eulerAngles);
-                            //part.AddForce(Engine.EngineDir * TimeWarp.fixedDeltaTime * simThrottle * Engine.MaxThrust);
                             TotalDir = Vector3.zero;
                             transforms = 0;
                             if (EcRate != 0)
                             {
-                                double Fuel = part.RequestResource("ElectricCharge", EcRate * TimeWarp.fixedDeltaTime * simThrottle);
-                                if (Fuel == 0)
+                                double ElectricCharge = part.RequestResource("ElectricCharge", EcRate * TimeWarp.fixedDeltaTime * simThrottle);
+                                if (ElectricCharge == 0)
                                 {
-                                    print(TAG + " To little electric charge remaining. Shutting down the engines");
+                                    ScreenMessages.PostScreenMessage(TAG + " Too little electric charge remaining!\nShutting down the engines");
                                     Throttle = 0f;
                                     vessel.ctrlState.mainThrottle = Throttle;
+                                    simThrottle = Engine.MinThrottle + (1 - Engine.MinThrottle) * Throttle;
                                 }
                             }
                             for (int i = 0; i < Engine.PropId.Count; i++)
                             {
-                                double Fuel = part.RequestResource(Engine.PropId[i], Engine.PropFlow[i] * TimeWarp.fixedDeltaTime * simThrottle);
+                                double Fuel = part.RequestResource(Engine.PropId[i], (double)(Engine.PropFlow[i] * TimeWarp.fixedDeltaTime * simThrottle));
                                 if (Fuel == 0)
                                 {
-                                    print(TAG + " To little fuel remaining. Shutting down the engines");
+                                    ScreenMessages.PostScreenMessage(TAG + " Too little fuel remaining!\nShutting down the engines");
                                     Throttle = 0f;
                                     vessel.ctrlState.mainThrottle = Throttle;
+                                    simThrottle = Engine.MinThrottle + (1 - Engine.MinThrottle) * Throttle;
                                 }
+                            }
+                            if (vessel.BestSituation == Vessel.Situations.SUB_ORBITAL)
+                            {
+                                ScreenMessages.PostScreenMessage(TAG + "Orbit too low!\nShutting down the engines");
+                                Throttle = 0f;
+                                vessel.ctrlState.mainThrottle = Throttle;
+                                simThrottle = Engine.MinThrottle + (1 - Engine.MinThrottle) * Throttle;
                             }
                             if (Engine.Waterfall != null)
                             {
@@ -378,22 +376,7 @@ namespace WarpThrust
             foreach (Propellant Propellant in Propellants)
             {
                 WarpEngines[WarpEngines.Count - 1].PropId.Add(Propellant.id);
-                WarpEngines[WarpEngines.Count - 1].PropFlow.Add(Propellant.ratio*PropsFlow);
-                print(TAG + " Propellant ID: " + Propellant.id);
-                print(TAG + " Propellant Flow: " + Propellant.ratio * PropsFlow);
-            }
-
-            Events["UseRot"].active = false;
-            Events["UseActive"].active = false;
-            Events["Rotate"].active = false;
-
-            if (state == StartState.Editor)
-            {
-                active = false;
-            }
-            else
-            {
-                active = true;
+                WarpEngines[WarpEngines.Count - 1].PropFlow.Add(Propellant.ratio * PropsFlow);
             }
         }
     }
