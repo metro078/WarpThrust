@@ -5,7 +5,8 @@ Better PersistentThrust plugin
 ## Dependencies
 
 ### Required
-These components are required for the mod to function and are bundled as part of any download:
+These components are required for the mod to function:
+* [Waterfall (10.5.0)](https://github.com/post-kerbin-mining-corporation/Waterfall)
 * [ModuleManager (4.2.3)](https://github.com/sarbian/ModuleManager)
 
 ## Installation
