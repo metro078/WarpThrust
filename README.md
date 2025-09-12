@@ -17,7 +17,7 @@ All bundled configs were made by [Jay-NVB](https://github.com/Jay-NVB/).
 
 ### Required
 These components are required for the mod to function:
-* [Waterfall (10.5.0)](https://github.com/post-kerbin-mining-corporation/Waterfall)
+* [Waterfall (0.10.5)](https://github.com/post-kerbin-mining-corporation/Waterfall)
 * [ModuleManager (4.2.3)](https://github.com/sarbian/ModuleManager)
 
 ## Installation
