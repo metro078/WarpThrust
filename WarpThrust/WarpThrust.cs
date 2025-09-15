@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using Waterfall;
@@ -16,7 +17,6 @@ namespace WarpThrust
         public List<string> PropName = new List<string>();
     }
 
-    [KSPAddon(KSPAddon.Startup.Flight, false)]
     public class WarpThrust : PartModule
     {
         [KSPField(guiActiveEditor = false, isPersistant = false)]
@@ -32,6 +32,7 @@ namespace WarpThrust
         bool useRotation = true;
         bool useActive = true;
         bool rotate = true;
+        bool active = false;
         float Throttle = 0f;
         float simThrottle = 0f;
         float PropsFlow = 0f;
@@ -166,7 +167,6 @@ namespace WarpThrust
             int i = 0;
             while (i < 10 && referenceBody != null)
             {
-                //print(referenceBody.name);
                 vesselPosition += referenceBody.getPositionAtUT(UT);
                 if (referenceBody.GetOrbit() == null)
                 {
@@ -224,6 +224,7 @@ namespace WarpThrust
                     double change = Vector3d.Dot(previousBurnVector, currentBurnVector);
                     if (change < (1 - changeThreshold))
                     {
+                        print(TAG + "Switching SAS from maneuver node to stability assist");
                         vessel.Autopilot.SetMode(VesselAutopilot.AutopilotMode.StabilityAssist);
                         return CalcWantedOrbRot(vessel, UT, WantedRot);
                     }
@@ -256,115 +257,115 @@ namespace WarpThrust
 
         public void FixedUpdate()
         {
-            if (part != null)
+            if (active && (vessel.BestSituation == Vessel.Situations.ORBITING || vessel.BestSituation == Vessel.Situations.ESCAPING || vessel.BestSituation == Vessel.Situations.SUB_ORBITAL))
             {
-                if (vessel.BestSituation == Vessel.Situations.ORBITING || vessel.BestSituation == Vessel.Situations.ESCAPING || vessel.BestSituation == Vessel.Situations.SUB_ORBITAL)
+                if (TimeWarp.CurrentRate != 1 && TimeWarp.WarpMode == TimeWarp.Modes.HIGH)
                 {
-                    if (TimeWarp.CurrentRate != 1 && TimeWarp.WarpMode == TimeWarp.Modes.HIGH)
+                    Engines = part.FindModuleImplementing<ModuleEngines>();
+                    if (Throttle != 0f)
                     {
-                        Engines = part.FindModuleImplementing<ModuleEngines>();
-                        if (Throttle != 0f)
+                        WantedRot = CalcWantedOrbRot(vessel, Planetarium.GetUniversalTime(), WantedRot);
+                        if (rotate)
                         {
-                            WantedRot = CalcWantedOrbRot(vessel, Planetarium.GetUniversalTime(), WantedRot);
-                            if (rotate)
+                            part.Rigidbody.angularVelocity = Vector3.zero;
+                            vessel.transform.Rotate(Quaternion.FromToRotation(vessel.transform.up.normalized, WantedRot).eulerAngles, Space.World); //thanks persistent thrust
+                            vessel.SetRotation(vessel.transform.rotation);
+                        }
+                        vessel.ctrlState.mainThrottle = Throttle;
+                        foreach (WarpEngine Engine in WarpEngines)
+                        {
+                            simThrottle = Engine.MinThrottle + (1 - Engine.MinThrottle) * Throttle;
+                            part.Effect(Engine.Effect, simThrottle, -1);
+                            foreach (Transform Thrusttransform in Engines.thrustTransforms)
                             {
-                                part.Rigidbody.angularVelocity = Vector3.zero;
-                                vessel.transform.Rotate(Quaternion.FromToRotation(vessel.transform.up.normalized, WantedRot).eulerAngles, Space.World); //thanks persistent thrust
-                                vessel.SetRotation(vessel.transform.rotation);
+                                TotalDir -= Thrusttransform.forward;
+                                transforms += 1;
                             }
-                            vessel.ctrlState.mainThrottle = Throttle;
-                            foreach (WarpEngine Engine in WarpEngines)
+                            Engine.EngineDir = TotalDir / transforms;
+                            if (useRotation)
                             {
-                                simThrottle = Engine.MinThrottle + (1 - Engine.MinThrottle) * Throttle;
-                                part.Effect(Engine.Effect, simThrottle, -1);
-                                foreach (Transform Thrusttransform in Engines.thrustTransforms)
-                                {
-                                    TotalDir -= Thrusttransform.forward;
-                                    transforms += 1;
-                                }
-                                Engine.EngineDir = TotalDir / transforms;
-                                if (useRotation)
-                                {
-                                    Perturb(vessel.orbit, Engine.EngineDir * (float)(TimeWarp.fixedDeltaTime * simThrottle * Engine.MaxThrust / vessel.totalMass), Planetarium.GetUniversalTime());
-                                }
-                                else
-                                {
-                                    Perturb(vessel.orbit, WantedRot * (float)(TimeWarp.fixedDeltaTime * simThrottle * Engine.MaxThrust / vessel.totalMass), Planetarium.GetUniversalTime());
-                                }
-                                TotalDir = Vector3.zero;
-                                transforms = 0;
+                                Perturb(vessel.orbit, Engine.EngineDir * (float)(TimeWarp.fixedDeltaTime * simThrottle * Engine.MaxThrust / vessel.totalMass), Planetarium.GetUniversalTime());
+                            }
+                            else
+                            {
+                                Perturb(vessel.orbit, WantedRot * (float)(TimeWarp.fixedDeltaTime * simThrottle * Engine.MaxThrust / vessel.totalMass), Planetarium.GetUniversalTime());
+                            }
+                            TotalDir = Vector3.zero;
+                            transforms = 0;
 
-                                if (EcRate != 0)
+                            if (EcRate != 0)
+                            {
+                                double ElectricCharge = part.RequestResource("ElectricCharge", EcRate * TimeWarp.fixedDeltaTime * simThrottle);
+                                if (ElectricCharge == 0)
                                 {
-                                    double ElectricCharge = part.RequestResource("ElectricCharge", EcRate * TimeWarp.fixedDeltaTime * simThrottle);
-                                    if (ElectricCharge == 0)
-                                    {
-                                        ScreenMessages.PostScreenMessage("Too little Electric Charge remaining, shutting down the engines!");
-                                        Throttle = 0f;
-                                        vessel.ctrlState.mainThrottle = Throttle;
-                                    }
-                                }
-                                for (int i = 0; i < Engine.PropId.Count; i++)
-                                {
-                                    double Fuel = part.RequestResource(Engine.PropId[i], (double)(Engine.PropFlow[i] * TimeWarp.fixedDeltaTime * simThrottle));
-                                    if (Fuel == 0)
-                                    {
-                                        ScreenMessages.PostScreenMessage("Too little " + Engine.PropName[i] + " remaining, shutting down the engines!");
-                                        Throttle = 0f;
-                                        vessel.ctrlState.mainThrottle = Throttle;
-                                    }
-                                }
-                                if (vessel.BestSituation == Vessel.Situations.SUB_ORBITAL)
-                                {
-                                    ScreenMessages.PostScreenMessage("Orbit too low, shutting down the engines!");
+                                    print(TAG + "Electric charge depleted, shutting down the engines");
+                                    ScreenMessages.PostScreenMessage("Too little Electric Charge remaining, shutting down the engines!");
                                     Throttle = 0f;
                                     vessel.ctrlState.mainThrottle = Throttle;
                                 }
-                                if (Engine.Waterfall != null)
+                            }
+                            for (int i = 0; i < Engine.PropId.Count; i++)
+                            {
+                                double Fuel = part.RequestResource(Engine.PropId[i], (double)(Engine.PropFlow[i] * TimeWarp.fixedDeltaTime * simThrottle));
+                                if (Fuel == 0)
                                 {
-                                    foreach (WaterfallController Controller in Engine.Waterfall.Controllers)
+                                    print(TAG + Engine.PropName[i] + " depleted, shutting down the engines");
+                                    ScreenMessages.PostScreenMessage("Too little " + Engine.PropName[i] + " remaining, shutting down the engines!");
+                                    Throttle = 0f;
+                                    vessel.ctrlState.mainThrottle = Throttle;
+                                }
+                            }
+                            if (vessel.BestSituation == Vessel.Situations.SUB_ORBITAL)
+                            {
+                                print(TAG + "Vessel entered sub-orbital trajectory, shutting down the engines");
+                                ScreenMessages.PostScreenMessage("Orbit too low, shutting down the engines!");
+                                Throttle = 0f;
+                                vessel.ctrlState.mainThrottle = Throttle;
+                            }
+                            if (Engine.Waterfall != null)
+                            {
+                                foreach (WaterfallController Controller in Engine.Waterfall.Controllers)
+                                {
+                                    if (Controller.name == "throttle")
                                     {
-                                        if (Controller.name == "throttle")
-                                        {
-                                            Controller.overridden = true;
-                                            Controller.overrideValue = Engine.MinThrottle + (1 - Engine.MinThrottle) * Throttle;
-                                        }
+                                        Controller.overridden = true;
+                                        Controller.overrideValue = Engine.MinThrottle + (1 - Engine.MinThrottle) * Throttle;
                                     }
                                 }
-                                timeWarp = true;
                             }
+                            timeWarp = true;
                         }
+                    }
+                }
+                else
+                {
+                    WantedRot = vessel.Autopilot.SAS.targetOrientation;
+                    if (useActive)
+                    {
+                        Throttle = Engines.requestedThrottle;
                     }
                     else
                     {
-                        WantedRot = vessel.Autopilot.SAS.targetOrientation;
-                        if (useActive)
+                        Throttle = vessel.ctrlState.mainThrottle;
+                    }
+                    if (timeWarp)
+                    {
+                        foreach (WarpEngine Engine in WarpEngines)
                         {
-                            Throttle = Engines.requestedThrottle;
-                        }
-                        else
-                        {
-                            Throttle = vessel.ctrlState.mainThrottle;
-                        }
-                        if (timeWarp)
-                        {
-                            foreach (WarpEngine Engine in WarpEngines)
+                            if (Engine.Waterfall != null)
                             {
-                                if (Engine.Waterfall != null)
+                                foreach (WaterfallController Controller in Engine.Waterfall.Controllers)
                                 {
-                                    foreach (WaterfallController Controller in Engine.Waterfall.Controllers)
+                                    if (Controller.name == "throttle")
                                     {
-                                        if (Controller.name == "throttle")
-                                        {
-                                            Controller.overridden = false;
-                                            Controller.overrideValue = Engine.MinThrottle + (1 - Engine.MinThrottle) * Throttle;
-                                        }
+                                        Controller.overridden = false;
+                                        Controller.overrideValue = Engine.MinThrottle + (1 - Engine.MinThrottle) * Throttle;
                                     }
                                 }
                             }
                         }
-                        timeWarp = false;
                     }
+                    timeWarp = false;
                 }
             }
         }
@@ -394,6 +395,15 @@ namespace WarpThrust
                 WarpEngines[WarpEngines.Count - 1].PropId.Add(Propellant.id);
                 WarpEngines[WarpEngines.Count - 1].PropFlow.Add(Propellant.ratio * PropsFlow);
                 WarpEngines[WarpEngines.Count - 1].PropName.Add(Propellant.displayName);
+            }
+
+            if (state == StartState.Editor)
+            {
+                active = false;
+            }
+            else
+            {
+                active = true;
             }
         }
     }
