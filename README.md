@@ -11,8 +11,6 @@ Different modes can be selected to fine-tune how WarpThrust works:
 * Rotation modes allow you to determine whether your vessel automatically rotates during warp thrust
 * Engine modes allow you to use an engine in warp thrust only when it is activated or use it whenever warp thrust is engaged
 
-All bundled configs were made by [Jay-NVB](https://github.com/Jay-NVB/).
-
 ## Dependencies
 
 ### Required
